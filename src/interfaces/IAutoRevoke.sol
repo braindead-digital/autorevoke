@@ -12,6 +12,7 @@ interface IAutoRevoke {
         ERC721, // 1
         ERC1155, // 2
         UNKNOWN // 3
+
     }
 
     struct TokenId {
