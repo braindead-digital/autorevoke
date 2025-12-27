@@ -7,17 +7,11 @@ pragma solidity ^0.8.13;
  * @notice IAutoRevoke is an interface for the AutoRevoke contract.
  */
 interface IAutoRevoke {
-    struct PCD {
-        bool _flag; // This flag indicates if at some point in the transaction, the user has approved the smart account to spend their tokens.
-        bytes _data; // This data is encoded with the tokens that we will revoke approvals for.
-    }
-
     enum TokenType {
         ERC20, // 0
         ERC721, // 1
         ERC1155, // 2
         UNKNOWN // 3
-
     }
 
     struct TokenId {
@@ -45,14 +39,22 @@ interface IAutoRevoke {
     function setConfig(bytes1 config) external;
 
     /**
-     * @dev Toggles the excluded spender for the smart account
+     * @dev Toggles the excluded spenders for the smart account
      * @param spender the spender to toggle
      * @param excluded whether to exclude the spender
      */
     function toggleExcludedSpender(address spender, bool excluded) external;
 
     /**
+     * @dev Toggles the excluded spenders for the smart account in batch
+     * @param spenders the spenders to toggle
+     * @param excluded whether to exclude the spender at the same index
+     */
+    function toggleExcludedSpenders(address[] calldata spenders, bool[] calldata excluded) external;
+
+    /**
      * @dev Revokes approvals in batch
+     * @notice This should only be used from ERC7579 smart accounts, even though anyone can call it
      * @param revokes the info of which approvals to revoke
      */
     function revoke(Revoke[] calldata revokes) external;

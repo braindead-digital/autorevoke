@@ -14,15 +14,15 @@ import {IERC20} from "./interfaces/token/IERC20.sol";
 import {IERC721} from "./interfaces/token/IERC721.sol";
 import {IERC1155} from "./interfaces/token/IERC1155.sol";
 
-import {console} from "forge-std/console.sol";
-
 /**
  * @title AutoRevoke
  * @author z (@zisbraindead) for Braindead Digital (@braindeaddgtl)
  * @notice AutoRevoke is an ERC7579-compliant module that automatically revokes all token (ERC20, ERC721, ERC1155) approvals once
  *         the transaction has been executed. The user can set a configuration byte that will determine which token types to revoke*
  *         approvals for. The user can also set a set of spender addresses that will be excluded from the auto-revoke
- *         process, in the case of OTC marketplaces, for example.
+ *         process, in the case of OTC marketplaces, for example. Note that delegatecalls are not supported.
+ *
+ *	   An important note is that excluded spenders will persist across installs, and users should be wary of this.
  *
  *         In reality, ERC721 does not really make much sense to revoke approvals for, as the approval is only valid until transfer,
  *         but it's still included for completeness, users can still choose to revoke approvals for ERC721 tokens if they want to,
@@ -45,6 +45,7 @@ contract AutoRevoke is IERC7579Hook, IAutoRevoke {
     //////////////////////////////////////////////////////////////
     error AlreadyInstalled();
     error InvalidConfig();
+    error InvalidLengths();
 
     //////////////////////////////////////////////////////////////
     // Events
@@ -55,7 +56,8 @@ contract AutoRevoke is IERC7579Hook, IAutoRevoke {
     event UninstalledAsExecutor(address indexed account);
     event Revoked(address indexed account, address indexed target, address indexed spender);
     event RevokeFailed(address indexed account, address indexed target, address indexed spender, uint8 reason);
-    event ExcludedSpender(address indexed account, address indexed spender, bool excluded);
+    event ExcludedSpender(address indexed account, address spender, bool excluded);
+    event ExcludedSpenders(address indexed account, address[] spenders, bool[] excluded); 
     event ConfigSet(address indexed account, bytes1 config);
 
     //////////////////////////////////////////////////////////////
@@ -119,6 +121,10 @@ contract AutoRevoke is IERC7579Hook, IAutoRevoke {
         uint256 length = approvals.length;
         for (uint256 i = 0; i < length;) {
             Approval memory approval = approvals[i];
+	    if (approval.target == address(0)) {
+		unchecked { ++i; }
+		continue;
+	    }
             _revokeApproval(approval.target, approval.spender, approval.tokenType, approval.tokenId);
             unchecked {
                 ++i;
@@ -132,6 +138,7 @@ contract AutoRevoke is IERC7579Hook, IAutoRevoke {
 
     // @inheritdoc IAutoRevoke
     function setConfig(bytes1 config) external override {
+	require(config <= 0x0F, InvalidConfig()); // 0x00 is allowed here on purpose so that users can disable the module
         _configs[msg.sender] = config;
         emit ConfigSet(msg.sender, config);
     }
@@ -143,9 +150,19 @@ contract AutoRevoke is IERC7579Hook, IAutoRevoke {
     }
 
     // @inheritdoc IAutoRevoke
+    function toggleExcludedSpenders(address[] calldata spenders, bool[] calldata excluded) external override {
+	uint256 len = spenders.length;
+	require(len == excluded.length, InvalidLengths());
+	for (uint256 i = 0; i < len;) {
+	    _excludedSpenders[msg.sender][spenders[i]] = excluded[i];
+	}
+        emit ExcludedSpenders(msg.sender, spenders, excluded);
+    }
+
+    // @inheritdoc IAutoRevoke
     function revoke(Revoke[] calldata revokes) external override {
         uint256 len = revokes.length;
-        for (uint256 i = 0; i < len;) {
+	for (uint256 i = 0; i < len;) {
             Revoke memory _revoke = revokes[i];
             address target = _revoke.target;
             TokenType tokenType = _getTokenType(target);
@@ -201,9 +218,12 @@ contract AutoRevoke is IERC7579Hook, IAutoRevoke {
      * @return tokenType the type of the token contract (0 = ERC20, 1 = ERC721, 2 = ERC1155, 3 = Unknown)
      */
     function _getTokenType(address target) internal view returns (TokenType tokenType) {
-        if (_supportsInterface(target, type(IERC20).interfaceId)) {
-            return TokenType.ERC20;
-        }
+	// We COULD do this check, but IERC165 support for ERC20s is rare, and since we can have ERC20 or Unknown as fallback, 
+	// and both are treated the same, it doesnt make much sense
+	//
+        // if (_supportsInterface(target, type(IERC20).interfaceId)) {
+        //    return TokenType.ERC20;
+  	// }
 
         if (_supportsInterface(target, type(IERC721).interfaceId)) {
             return TokenType.ERC721;
@@ -213,7 +233,7 @@ contract AutoRevoke is IERC7579Hook, IAutoRevoke {
             return TokenType.ERC1155;
         }
 
-        return TokenType.UNKNOWN;
+        return TokenType.ERC20;
     }
 
     /**
@@ -233,8 +253,8 @@ contract AutoRevoke is IERC7579Hook, IAutoRevoke {
             assembly {
                 amount := mload(add(callData, 0x44))
             }
-            return selector == IERC20.approve.selector && amount > 0;
-        } else if (tokenType == TokenType.ERC721) {
+            return (selector == IERC20.approve.selector || selector == 0x39509351) && amount > 0; // 0x39509351 is the selector for increaseAllowance
+        } else if (tokenType == TokenType.ERC721) { 
             if (selector == IERC721.approve.selector) {
                 bytes32 spender;
                 assembly {
@@ -299,12 +319,13 @@ contract AutoRevoke is IERC7579Hook, IAutoRevoke {
     }
 
     /**
-     * @dev Handles the calldata and returns the PCD.
+     * @dev Handles the calldata and returns the parsed call data.
      * @param data The calldata to parse
      * @param config The configuration byte
      * @return _data The parsed calldata
      */
     function _handleCalldata(bytes calldata data, bytes1 config) internal view returns (bytes memory _data) {
+	if (config == 0x00) return ""; // User has disabled the module
         (bool erc20, bool erc721, bool erc1155, bool single) = _decodeConfig(config);
         bytes32 rawMode = bytes32(data[4:36]);
         (CallType callType,,,) = ModeCode.wrap(rawMode).decode();
@@ -422,7 +443,7 @@ contract AutoRevoke is IERC7579Hook, IAutoRevoke {
             emit Revoked(msg.sender, target, spender);
         } else if (tokenType == TokenType.ERC721) {
             bytes memory callData = tokenId.active
-                ? abi.encodeWithSelector(IERC721.approve.selector, address(0), tokenId)
+                ? abi.encodeWithSelector(IERC721.approve.selector, address(0), tokenId.tokenId)
                 : abi.encodeWithSelector(IERC721.setApprovalForAll.selector, spender, false);
             bytes memory executionCalldata = ExecutionLib.encodeSingle(target, 0, callData);
             (bool success,) =
