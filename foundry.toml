@@ -1,0 +1,13 @@
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+viaIr = true
+remappings = [
+    "@erc7579/=lib/erc7579-implementation/src/",
+    "@erc7579-tests/=lib/erc7579-implementation/test/",
+    "src/=lib/erc7579-implementation/src/",
+    "@oz/=lib/openzeppelin-contracts/contracts/"
+]
+
+# See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
