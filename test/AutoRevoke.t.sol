@@ -23,14 +23,12 @@ import {MockERC721} from "./mocks/MockERC721.sol";
 import {MockERC1155} from "./mocks/MockERC1155.sol";
 import {MockWhatever} from "./mocks/MockWhatever.sol";
 
-import {console} from "forge-std/console.sol";
-
 contract AutoRevokeTest is TestBaseUtilAdvanced {
     AutoRevoke public autoRevoke;
     address public account;
     bytes public initCode;
 
-    address public JUNK = address(0x67676767);
+    address public constant JUNK = address(0x67676767);
 
     MockERC20[] public erc20s;
     MockERC20With165[] public erc20With165s;
@@ -260,11 +258,11 @@ contract AutoRevokeTest is TestBaseUtilAdvanced {
         // Batch approve for 10 ERC20 tokens
         uint256 numTokens = 10;
 
-        uint256[] memory afterERC20Interaction = new uint256[](numTokens);
+        uint256[] memory afterErc20Interaction = new uint256[](numTokens);
         uint256 totalInteractions = 0;
         for (uint256 i = 0; i < numTokens; i++) {
             uint8 x = seed % 3;
-            afterERC20Interaction[i] = x;
+            afterErc20Interaction[i] = x;
             totalInteractions += x;
         }
 
@@ -276,7 +274,7 @@ contract AutoRevokeTest is TestBaseUtilAdvanced {
                 value: 0,
                 callData: abi.encodeWithSelector(IERC20.approve.selector, JUNK, uint256(1000 + i))
             });
-            uint256 x = afterERC20Interaction[i];
+            uint256 x = afterErc20Interaction[i];
             for (uint256 j = 0; j < x; j++) {
                 executions[offset + numTokens + j] = Execution({
                     target: address(whatever),
