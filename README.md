@@ -21,6 +21,14 @@ Value | Effect
 0x01 -> 0x0F | Registration as a hook with custom config
 0xFF | Registration as an executor
 
+### Installation workflow
+
+Two interactions are needed for installation as a hook:
+1) Installation as a hook (with initData as the config)
+2) Installation as an executor (with initData as 0xFF to prevent failure)
+
+And for installation as just an executor, omit the first interaction.
+
 ## Concepts
 ### Configuration
 
