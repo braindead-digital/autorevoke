@@ -20,9 +20,14 @@ jobs:
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
       - name: Install submodule dependencies
         run: |
-          cd lib/erc7579-implementation && npm install
+          cd lib/erc7579-implementation && pnpm install
 
       - name: Show Forge version
         run: |
