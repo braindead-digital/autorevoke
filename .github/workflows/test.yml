@@ -20,6 +20,10 @@ jobs:
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
 
+      - name: Install submodule dependencies
+        run: |
+          cd lib/erc7579-implementation && npm install
+
       - name: Show Forge version
         run: |
           forge --version
